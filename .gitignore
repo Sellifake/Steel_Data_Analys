@@ -1,0 +1,34 @@
+# Python/IDE 通用
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+.idea/
+.vscode/
+*.log
+
+# 数据与中间产物（体积大/无需纳入版本）
+*.parquet
+*.joblib
+*.zip
+*.xlsx
+*.csv
+!/05_result_plot/results/**/*.csv
+
+# 训练与可视化结果目录一律忽略
+01_read_data/results/
+02_frost_model/results/
+03_nonlinear_model/results/
+04_neural_network/results/
+05_result_plot/results/
+中间结果保存/
+
+# 允许05_result_plot的关键图片被跟踪（用于README展示）
+!05_result_plot/results/**/*.png
+
+
+
