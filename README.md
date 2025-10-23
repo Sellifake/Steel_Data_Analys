@@ -4,15 +4,15 @@
 
 ### 模块结构与职责
 - `01_read_data/`：数据读取、清洗、合并与EDA；生成特征筛选结果与扰动数据集。
-  - 详见 `01_read_data/README.md`。
+  - 详见 [01_read_data/README.md](01_read_data/README.md)
 - `02_frost_model/`：基于随机森林、XGBoost、LightGBM 的树模型训练、调参与扰动预测。
-  - 详见 `02_frost_model/README.md`。
+  - 详见 [02_frost_model/README.md](02_frost_model/README.md)
 - `03_nonlinear_model/`：基于 GPR、SVR 的非线性回归建模与扰动预测。
-  - 详见 `03_nonlinear_model/README.md`。
+  - 详见 [03_nonlinear_model/README.md](03_nonlinear_model/README.md)
 - `04_neural_network/`：基于 TabNet 的深度模型训练与扰动预测（ICE/PDP）。
-  - 详见 `04_neural_network/README.md`。
+  - 详见 [04_neural_network/README.md](04_neural_network/README.md)
 - `05_result_plot/`：汇总并对比模型回归指标、特征重要性等可视化结果。
-  - 详见 `05_result_plot/README.md`。
+  - 详见 [05_result_plot/README.md](05_result_plot/README.md)
 
 ### 快速开始
 1. 依次运行 `01_read_data` → `02_frost_model`/`03_nonlinear_model`/`04_neural_network`，生成各自的 `results` 与指标汇总。

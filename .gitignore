@@ -24,11 +24,7 @@ env/
 02_frost_model/results/
 03_nonlinear_model/results/
 04_neural_network/results/
-05_result_plot/results/
 中间结果保存/
-
-# 允许05_result_plot的关键图片被跟踪（用于README展示）
-!05_result_plot/results/**/*.png
 
 
 
