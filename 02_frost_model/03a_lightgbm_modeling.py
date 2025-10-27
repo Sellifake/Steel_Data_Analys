@@ -3,9 +3,10 @@
 文件名: 03a_lightgbm_modeling.py
 功能: 
     1. 加载01_read_data文件夹中经过特征筛选后的最终数据集。
-    2. 对每个性能指标，使用设置了随机种子的K-折交叉验证来评估 LightGBM 模型的性能。
-    3. 在完整数据集上训练最终模型，并进行保存，确保模型可复现。
-    4. 生成并保存特征重要性 (图+CSV)。
+    2. 对每个性能指标，使用 RandomizedSearchCV (随机搜索) 进行 K-折交叉验证和超参数调优。
+    3. 使用*调优后*的最佳模型，重新运行 K-折交叉验证以获取 R2, MAE, RMSE。
+    4. 在完整数据集上训练*调优后*的最终模型，并进行保存。
+    5. 生成并保存调优后模型的特征重要性 (图+CSV)。
 """
 
 import pandas as pd
@@ -15,40 +16,65 @@ import re
 import matplotlib.pyplot as plt
 import joblib
 import lightgbm as lgb # 导入 LightGBM
-from sklearn.model_selection import KFold, cross_validate
+from sklearn.model_selection import KFold, cross_validate, RandomizedSearchCV
+# RandomizedSearchCV 依赖 scipy.stats
+from scipy.stats import randint, uniform
 
 # --- 1. 配置区 ---
 
 # --- 输入/输出文件配置 ---
 INPUT_DIR = '../01_read_data/results'
-OUTPUT_DIR = 'results/03_lightgbm_results' # 更改为LightGBM的特定输出目录
-# 使用01_read_data生成的最终清理数据
+OUTPUT_DIR = 'results/03_lightgbm_results' 
 CLEANED_DATA_FILE = '04_data_selected.xlsx'
 
 # --- 列定义 ---
 ID_COLUMN = '罩退钢卷号'
 PERFORMANCE_METRICS = ["抗拉强度", "屈服Rp0.2值*", "断后伸长率"]
 
-# --- 模型配置 ---
+# --- 模型与调优配置 ---
 # 设置全局随机种子以确保实验可复现
 RANDOM_STATE = 42
 K_FOLDS = 5
+# 随机搜索的迭代次数 (n_iter)
+N_ITER_SEARCH = 200 
+# 并行度设置 (使用5个CPU核心)
+N_JOBS_PARALLEL = 5  
 
 # --- Matplotlib 设置 ---
 plt.rcParams['font.sans-serif'] = ['SimHei'] 
 plt.rcParams['axes.unicode_minus'] = False 
 
+# --- 调优参数空间定义 (LightGBM) ---
+# 搜索空间已适当扩展
+lgbm_param_dist = {
+    'n_estimators': randint(100, 1200),
+    'learning_rate': uniform(0.01, 0.2),
+    'max_depth': randint(3, 12),
+    'num_leaves': randint(20, 60),             # 关键参数：叶子节点数
+    'subsample': uniform(0.6, 0.4),            # (0.6-1.0)
+    'colsample_bytree': uniform(0.6, 0.4),     # (0.6-1.0)
+    'reg_alpha': uniform(0, 1),
+    'reg_lambda': uniform(0, 1)
+}
+
 
 def sanitize_filename(filename):
-    """(复制自 01a) 清洗文件名中的非法字符。"""
+    """
+    清洗文件名中的非法字符，确保文件名符合系统要求
+    与01a_random_forest_modeling.py中的函数保持一致
+    """
     return re.sub(r'[\\/*?:"<>|]', '_', filename)
 
 
 
 def main():
-    """主执行函数"""
+    """
+    主执行函数
+    执行LightGBM超参数调优和建模的完整流程
+    """
     print("=" * 60)
-    print("--- 启动脚本: 03a_lightgbm_modeling.py ---")
+    print("--- 启动脚本: 03a_lightgbm_modeling.py (集成超参数调优) ---")
+    print(f"--- 调优迭代次数: {N_ITER_SEARCH}, 并行度: {N_JOBS_PARALLEL} ---")
     print("=" * 60)
 
     if not os.path.exists(OUTPUT_DIR):
@@ -72,10 +98,10 @@ def main():
     cv_performance_summary = []
 
     for metric in Y_all.columns:
-        print(f"\n\n{'='*20} 正在为性能指标: '{metric}' 进行建模 (LightGBM) {'='*20}")
+        print(f"\n\n{'='*20} 正在为性能指标: '{metric}' 进行LightGBM超参数调优 {'='*20}")
         safe_metric_name = sanitize_filename(metric)
 
-        # 准备当前目标的数据集 (数据完整性检测，移除包含NaN的行)
+        # 准备当前目标的数据集
         metric_data = pd.concat([X_all, Y_all[metric]], axis=1).dropna()
         if metric_data.empty:
             print(f"    [警告] 移除NaN后，没有剩余数据可用于评估 '{metric}'，跳过此指标。")
@@ -84,67 +110,80 @@ def main():
         X_train = metric_data[X_all.columns]
         y_train = metric_data[metric]
         
-        # LightGBM 不需要 base_score 修复
-
-        # --- 2a. K-折交叉验证 ---
-        print(f"\n--- (1/3) 正在执行 {K_FOLDS}-折交叉验证 ---")
+        # --- 2a. 执行RandomizedSearchCV超参数调优 ---
+        print(f"\n--- (1/4) 正在执行 {N_ITER_SEARCH} 次迭代的 {K_FOLDS}-折交叉验证调优 ---")
         
-        # 实例化 LightGBM 回归模型
-        # 为确保可复现性，除了 random_state，还需设置 boosting_type='gbdt' (默认)
-        # 增加 'verbose=-1' 关闭LGBM的啰嗦输出
-        model = lgb.LGBMRegressor(
-            n_estimators=100, 
+        # 实例化 *基础* LightGBM 回归模型 (用于调优)
+        base_model = lgb.LGBMRegressor(
             random_state=RANDOM_STATE, 
-            n_jobs=-1,
-            verbose=-1 # 关闭训练过程中的输出
+            n_jobs=N_JOBS_PARALLEL, # 使用设定的并行度
+            verbose=-1 # 关闭LGBM的啰嗦输出
         )
         
         kfold = KFold(n_splits=K_FOLDS, shuffle=True, random_state=RANDOM_STATE)
+        
+        # 使用 R2 作为调优的主要评分标准
+        search = RandomizedSearchCV(
+            estimator=base_model,
+            param_distributions=lgbm_param_dist,
+            n_iter=N_ITER_SEARCH,
+            cv=kfold,
+            scoring='r2', # 调优目标
+            n_jobs=N_JOBS_PARALLEL, # 限制并行搜索
+            random_state=RANDOM_STATE,
+            verbose=1 # 显示调优进度
+        )
+        
+        search.fit(X_train, y_train)
+            
+        print(f"    调优完成。最佳R2 (Tuning): {search.best_score_:.4f}")
+        print(f"    最佳参数: {search.best_params_}")
+        
+        # --- 2b. 使用最佳参数重新评估所有性能指标 ---
+        print(f"\n--- (2/4) 正在使用最佳参数重新运行交叉验证以获取所有指标 ---")
+        final_model = search.best_estimator_ # 这就是调优后的最佳模型
+        
         scoring_metrics = ['r2', 'neg_mean_absolute_error', 'neg_mean_squared_error']
-        scores = cross_validate(model, X_train, y_train, cv=kfold, scoring=scoring_metrics)
+        scores = cross_validate(final_model, X_train, y_train, cv=kfold, 
+                                scoring=scoring_metrics, n_jobs=N_JOBS_PARALLEL)
         
         # 打印每一折的详细结果
-        print(f"    --- 每一折的详细结果 ---")
+        print(f"    --- 每一折的详细结果 (使用最佳参数) ---")
         for fold in range(K_FOLDS):
             r2_fold = scores['test_r2'][fold]
             mae_fold = -scores['test_neg_mean_absolute_error'][fold]
             rmse_fold = np.sqrt(-scores['test_neg_mean_squared_error'][fold])
             print(f"    第{fold+1}折: R2={r2_fold:.4f}, MAE={mae_fold:.4f}, RMSE={rmse_fold:.4f}")
-        
+
         mean_r2 = np.mean(scores['test_r2'])
         mean_mae = -np.mean(scores['test_neg_mean_absolute_error'])
         mean_rmse = np.sqrt(-np.mean(scores['test_neg_mean_squared_error']))
         
         cv_performance_summary.append({
-            '性能指标': metric, 'R2 Score (平均值)': f"{mean_r2:.4f}",
-            'MAE (平均值)': f"{mean_mae:.4f}", 'RMSE (平均值)': f"{mean_rmse:.4f}"
+            '性能指标': metric, 
+            'R2 Score (平均值)': f"{mean_r2:.4f}",
+            'MAE (平均值)': f"{mean_mae:.4f}", 
+            'RMSE (平均值)': f"{mean_rmse:.4f}",
+            '最佳参数': str(search.best_params_) # 记录最佳参数
         })
         print(f"    交叉验证完成 (平均值): R2={mean_r2:.4f}, MAE={mean_mae:.4f}, RMSE={mean_rmse:.4f}")
 
-        # --- 2b. 训练最终模型并保存 ---
-        print("\n--- (2/3) 正在训练最终模型并保存 ---")
+        # --- 2c. 训练最终模型并保存到磁盘 ---
+        print("\n--- (3/4) 正在训练最终模型并保存 ---")
         
-        # 实例化最终的 LightGBM 模型
-        final_model = lgb.LGBMRegressor(
-            n_estimators=100, 
-            random_state=RANDOM_STATE, 
-            n_jobs=-1,
-            verbose=-1
-        )
+        # 遵循 04_boosting_tuning.py 的逻辑，在全部数据上重新fit
         final_model.fit(X_train, y_train)
 
         model_save_dir = os.path.join(OUTPUT_DIR, 'saved_models')
         if not os.path.exists(model_save_dir): os.makedirs(model_save_dir)
         model_path = os.path.join(model_save_dir, f'{safe_metric_name}_model.joblib')
         
-        # LightGBM 模型同样可以使用 joblib 保存
         joblib.dump(final_model, model_path)
         print(f"    模型文件已保存至: {model_path}")
 
-        # --- 2c. 模型解释与分析 (特征重要性) ---
-        print("\n--- (3/3) 正在进行模型解释 (特征重要性) ---")
+        # --- 2d. 进行模型解释和特征重要性分析 ---
+        print("\n--- (4/4) 正在进行模型解释 (特征重要性) ---")
         
-        # 特征重要性 (LightGBM 同样支持 .feature_importances_)
         importance_df = pd.DataFrame({
             'Feature': X_train.columns,
             'Importance': final_model.feature_importances_
@@ -155,7 +194,7 @@ def main():
         
         plt.figure(figsize=(12, 8))
         importance_df.head(20).sort_values(by='Importance', ascending=True).plot(kind='barh', x='Feature', y='Importance', legend=False, figsize=(12, 8))
-        plt.title(f'"{metric}" 的Top 20重要特征 (LightGBM)', fontsize=16)
+        plt.title(f'"{metric}" 的Top 20重要特征 (LightGBM - Tuned)', fontsize=16)
         plt.xlabel('特征重要性', fontsize=12)
         plt.ylabel('特征', fontsize=12)
         plt.tight_layout()
@@ -168,16 +207,17 @@ def main():
     # --- 3. 汇总并保存交叉验证结果 ---
     if cv_performance_summary:
         summary_df = pd.DataFrame(cv_performance_summary)
-        print(f"\n\n--- LightGBM 交叉验证性能汇总表 ({K_FOLDS}-Fold CV, random_state={RANDOM_STATE}) ---")
-        print(summary_df.to_string(index=False))
+        print(f"\n\n--- LightGBM 调优后交叉验证性能汇总表 ({K_FOLDS}-Fold CV, random_state={RANDOM_STATE}) ---")
+        # 按照R2排序
+        summary_df_sorted = summary_df.sort_values(by='R2 Score (平均值)', ascending=False)
+        print(summary_df_sorted.to_string(index=False))
         
-        # 更改汇总文件名
-        summary_path = os.path.join(OUTPUT_DIR, 'lightgbm_performance_summary.csv')
-        summary_df.to_csv(summary_path, index=False, encoding='utf-8-sig')
+        summary_path = os.path.join(OUTPUT_DIR, 'lightgbm_tuned_performance_summary.csv')
+        summary_df_sorted.to_csv(summary_path, index=False, encoding='utf-8-sig')
         print(f"\n交叉验证性能汇总表已保存至: {summary_path}")
 
     print("\n" + "=" * 60)
-    print("--- 步骤3a (LightGBM) 全部任务完成 ---")
+    print("--- LightGBM超参数调优任务全部完成 ---")
     print("=" * 60)
 
 if __name__ == '__main__':

@@ -41,9 +41,9 @@ K_FOLDS = 5
 
 # --- SHAP分析开关 ---
 # 是否生成SHAP概要图
-ENABLE_SHAP_SUMMARY_PLOT = False
+ENABLE_SHAP_SUMMARY_PLOT = True
 # 是否生成SHAP依赖图
-ENABLE_SHAP_DEPENDENCE_PLOTS = False
+ENABLE_SHAP_DEPENDENCE_PLOTS = True
 
 # --- Matplotlib 设置 ---
 plt.rcParams['font.sans-serif'] = ['SimHei'] 
@@ -51,12 +51,15 @@ plt.rcParams['axes.unicode_minus'] = False
 
 
 def sanitize_filename(filename):
-    """清洗文件名中的非法字符。"""
+    """
+    清洗文件名中的非法字符，确保文件名符合系统要求
+    """
     return re.sub(r'[\\/*?:"<>|]', '_', filename)
 
 def visualize_decision_tree(model, feature_names, metric_name, output_dir):
     """
-    从随机森林中提取第一棵树，并将其结构可视化。
+    从随机森林中提取第一棵树，并将其结构可视化
+    用于理解模型决策过程和特征分裂规则
     """
     tree_viz_dir = os.path.join(output_dir, 'decision_tree_visualizations')
     if not os.path.exists(tree_viz_dir):
@@ -83,9 +86,12 @@ def visualize_decision_tree(model, feature_names, metric_name, output_dir):
 
 
 def main():
-    """主执行函数"""
+    """
+    主执行函数
+    执行随机森林建模的完整流程
+    """
     print("=" * 60)
-    print("--- 启动脚本: 04_random_forest_modeling.py ---")
+    print("--- 启动脚本: 01a_random_forest_modeling.py ---")
     print("=" * 60)
 
     if not os.path.exists(OUTPUT_DIR):
@@ -109,10 +115,10 @@ def main():
     cv_performance_summary = []
 
     for metric in Y_all.columns:
-        print(f"\n\n{'='*20} 正在为性能指标: '{metric}' 进行建模 {'='*20}")
+        print(f"\n\n{'='*20} 正在为性能指标: '{metric}' 进行随机森林建模 {'='*20}")
         safe_metric_name = sanitize_filename(metric)
 
-        # 准备当前目标的数据集 (数据完整性检测，移除包含NaN的行)
+        # 准备当前目标的数据集，移除包含NaN的行以确保数据完整性
         metric_data = pd.concat([X_all, Y_all[metric]], axis=1).dropna()
         if metric_data.empty:
             print(f"    [警告] 移除NaN后，没有剩余数据可用于评估 '{metric}'，跳过此指标。")
@@ -121,7 +127,7 @@ def main():
         X_train = metric_data[X_all.columns]
         y_train = metric_data[metric]
 
-        # --- 2a. K-折交叉验证 ---
+        # --- 2a. 执行K-折交叉验证评估模型性能 ---
         print(f"\n--- (1/4) 正在执行 {K_FOLDS}-折交叉验证 ---")
         model = RandomForestRegressor(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1)
         kfold = KFold(n_splits=K_FOLDS, shuffle=True, random_state=RANDOM_STATE)
@@ -146,7 +152,7 @@ def main():
         })
         print(f"    交叉验证完成 (平均值): R2={mean_r2:.4f}, MAE={mean_mae:.4f}, RMSE={mean_rmse:.4f}")
 
-        # --- 2b. 训练最终模型并保存 ---
+        # --- 2b. 训练最终模型并保存到磁盘 ---
         print("\n--- (2/4) 正在训练最终模型并保存 ---")
         final_model = RandomForestRegressor(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1)
         final_model.fit(X_train, y_train)
@@ -157,7 +163,7 @@ def main():
         joblib.dump(final_model, model_path)
         print(f"    模型文件已保存至: {model_path}")
 
-        # --- 2c. 模型解释与分析 (特征重要性 + SHAP) ---
+        # --- 2c. 进行模型解释与分析，包括特征重要性分析 ---
         print("\n--- (3/4) 正在进行模型解释与分析 ---")
         
         # 特征重要性
@@ -227,7 +233,7 @@ def main():
         else:
             print("    - [已跳过] 子开关 ENABLE_SHAP_DEPENDENCE_PLOTS=False，跳过SHAP依赖图生成。")
         
-        # --- 2d. 可视化决策树分裂节点 ---
+        # --- 2d. 可视化决策树分裂节点结构 ---
         print("\n--- (4/4) 正在可视化决策树的分裂节点 ---")
         visualize_decision_tree(final_model, X_train.columns, metric, OUTPUT_DIR)
 
@@ -242,7 +248,7 @@ def main():
         print(f"\n交叉验证性能汇总表已保存至: {summary_path}")
 
     print("\n" + "=" * 60)
-    print("--- 步骤4全部任务完成 ---")
+    print("--- 随机森林建模任务全部完成 ---")
     print("=" * 60)
 
 if __name__ == '__main__':
