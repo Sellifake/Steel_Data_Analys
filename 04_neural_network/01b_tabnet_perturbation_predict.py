@@ -10,7 +10,7 @@
     4. 使用 TabNet Pipeline 对*清洗后*的数据集进行批量预测 (np.float32)。
     5. 保存详细的原始预测结果 (ICE)。
     6. 对预测结果按“扰动值”进行分组统计 (PDP)。
-    7. 绘制并保存 PDP 效应图 (带 90% 置信区间)。
+    7. [修改] 绘制并保存 PDP 效应图 (带 95% 置信区间和性能基线)。
 """
 
 import pandas as pd
@@ -25,6 +25,12 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from pytorch_tabnet.tab_model import TabNetRegressor
+
+# --- 【新增修改点 1】: GPU配置 (确保预测也在GPU上运行) ---
+import torch
+GPU_DEVICE_ID = 0
+os.environ["CUDA_VISIBLE_DEVICES"] = str(GPU_DEVICE_ID)
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # --- 1. 配置区 ---
 
@@ -41,6 +47,13 @@ PERTURBED_FEATURES_LIST = ['热点_峰值温度', '冷点_峰值温度', '保温
 
 # --- 模型配置 ---
 MODEL_NAME_PREFIX = '01a_TabNet' 
+
+# --- 【新增修改点 2】: 定义性能指标的基线 (使用您提供的最新值) ---
+PERFORMANCE_BASELINES = {
+    "抗拉强度": {"min": 260, "max": 370},
+    "屈服Rp0.2值*": {"min": 120, "max": 240},
+    "断后伸长率": {"min": 34, "max": float('inf')} # 'inf' 表示正无穷
+}
 
 # --- 2. 辅助函数 ---
 
@@ -78,18 +91,19 @@ def load_models(model_dir, metrics, model_name_prefix):
             # 加载 Pipeline
             pipeline = joblib.load(pipeline_path)
             
-            # 创建一个新的 TabNetRegressor 实例
+            # --- 【新增修改点 3】: 确保模型在 GPU/CPU 上加载 ---
             # (joblib 无法正确序列化 PyTorch 模型，所以我们重新加载)
-            loaded_model = TabNetRegressor()
+            loaded_model = TabNetRegressor(device_name=device) # 指定设备
             
             # 从 .zip 文件加载权重
+            # TabNet load_model 会自动将模型移动到 device_name 指定的设备
             loaded_model.load_model(weights_path)
             
             # 将加载了权重的模型 "注入" 回 Pipeline
             pipeline.named_steps['model'] = loaded_model
             
             models[metric] = pipeline
-            print(f"    [成功] 已加载模型: {pipeline_filename} + {weights_filename}")
+            print(f"    [成功] 已加载模型 (将在 {device} 上运行): {pipeline_filename} + {weights_filename}")
             
         except FileNotFoundError as e:
             print(f"    [严重错误] 模型文件未找到: {e.filename}")
@@ -109,12 +123,13 @@ def get_feature_columns(df):
     return feature_cols
 
 def calculate_summary_stats(df, group_col, pred_cols):
-    """(复制自 01b) 计算分组统计汇总"""
-    print("    正在计算统计汇总 (均值, 中位数, P5, P95, 标准差)...")
+    """(复制自 01b, 并修改为 95% CI) 计算分组统计汇总"""
+    print("    正在计算统计汇总 (均值, 中位数, P2.5, P97.5, 标准差)...")
     
-    p05 = lambda x: x.quantile(0.05); p05.__name__ = 'P05'
-    p95 = lambda x: x.quantile(0.95); p95.__name__ = 'P95'
-    agg_funcs = ['mean', 'median', p05, p95, 'std']
+    # --- 【新增修改点 4】: 修改为 95% 置信区间 ---
+    p025 = lambda x: x.quantile(0.025); p025.__name__ = 'P025'
+    p975 = lambda x: x.quantile(0.975); p975.__name__ = 'P975'
+    agg_funcs = ['mean', 'median', p025, p975, 'std']
     
     summary = df.groupby(group_col)[pred_cols].agg(agg_funcs)
     summary.columns = ['_'.join(col).strip() for col in summary.columns.values]
@@ -136,7 +151,7 @@ def main():
     """主执行函数"""
     print("=" * 60)
     print("--- 启动脚本: 01b_tabnet_perturbation_predict.py ---")
-    print(f"--- 目的: 使用 {MODEL_NAME_PREFIX} 模型对扰动数据进行预测 ---")
+    print(f"--- 目的: 使用 {MODEL_NAME_PREFIX} 模型对扰动数据进行预测 (Device: {device}) ---")
     print("=" * 60)
 
     if not os.path.exists(MODEL_IO_DIR):
@@ -172,7 +187,7 @@ def main():
             print(f"    [错误] 读取CSV文件时出错: {e}")
             continue
             
-        # --- [新增] 数据清洗：移除空行 + 0填充 (仿照 02b SVR 脚本) ---
+        # --- [SVR特定] 数据清洗：移除空行 + 0填充 (保留此逻辑) ---
         x_columns = get_feature_columns(df_perturbed)
         if len(x_columns) == 0:
             print("    [严重错误] 未能在数据中识别出任何特征列。")
@@ -201,7 +216,7 @@ def main():
         if df_perturbed.empty:
             print("    [警告] 清洗后没有剩余数据，跳过此扰动特征。")
             continue
-        # --- [新增] 清洗结束 ---
+        # --- [SVR特定] 清洗结束 ---
             
         print(f"    已识别 {len(x_columns)} 个特征用于预测。")
         
@@ -267,37 +282,73 @@ def main():
             else:
                 base_col_name = f'pred_{sanitize_filename(metric)}'
             
+            # --- 【新增修改点 5】: 访问 P025 和 P975 列 ---
             mean_col = f'{base_col_name}_mean'
-            p05_col = f'{base_col_name}_P05'
-            p95_col = f'{base_col_name}_P95'
+            p025_col = f'{base_col_name}_P025' # 从 P05 修改
+            p975_col = f'{base_col_name}_P975' # 从 P95 修改
             
-            if not all(col in df_summary_pdp.columns for col in [mean_col, p05_col, p95_col]):
+            if not all(col in df_summary_pdp.columns for col in [mean_col, p025_col, p975_col]):
                 print(f"    [绘图警告] 缺少 {metric} 的统计列，跳过绘图。")
                 continue
 
             plt.figure(figsize=(10, 6))
             
             x_values = df_summary_pdp[PERTURBATION_COLUMN]
-
-            # 使用扰动值作为横坐标绘制曲线
+            p025_values = df_summary_pdp[p025_col] # 从 P05 修改
+            p975_values = df_summary_pdp[p975_col] # 从 P95 修改
+            
+            # 绘制均值线
             plt.plot(x_values, df_summary_pdp[mean_col], 'b-', label='预测均值 (Mean)')
+            
+            # --- 【新增修改点 6】: 绘制 95% 置信区间 (P2.5 到 P97.5) ---
             plt.fill_between(
                 x_values, 
-                df_summary_pdp[p05_col], 
-                df_summary_pdp[p95_col], 
+                p025_values, # 从 P05 修改
+                p975_values, # 从 P95 修改
                 color='blue', 
                 alpha=0.1, 
-                label='90% 置信区间 (P5-P95)'
+                label='95% 置信区间 (P2.5-P97.5)' # 标签从 90% 修改
             )
             # 保证置信区间完整显示
             plt.xlim(x_values.min(), x_values.max())
+            
+            # --- 【新增修改点 7】: 添加性能指标基线 ---
+            baselines = PERFORMANCE_BASELINES.get(metric)
+            custom_yticks = set() # 用于存储基线值以添加到Y轴
+            
+            if baselines:
+                min_val = baselines.get('min')
+                max_val = baselines.get('max')
+                
+                # 绘制最小值基线
+                if min_val is not None and min_val != float('-inf'):
+                    plt.axhline(y=min_val, color='red', linestyle='--', linewidth=1.2, 
+                                label=f'最小值基线 ({min_val})')
+                    custom_yticks.add(min_val) # 添加到Y轴刻度
+                    
+                # 绘制最大值基线 (排除无穷大)
+                if max_val is not None and max_val != float('inf'):
+                    plt.axhline(y=max_val, color='red', linestyle='--', linewidth=1.2, 
+                                label=f'最大值基线 ({max_val})')
+                    custom_yticks.add(max_val) # 添加到Y轴刻度
             
             plot_title = f'{feature_name} 扰动 对 {metric} 的影响 (PDP - TabNet)'
             plt.title(plot_title, fontsize=16)
             plt.xlabel(f'{feature_name} 扰动值 (delta)', fontsize=12)
             plt.ylabel(f'预测的 {metric}', fontsize=12)
             
-            plt.legend()
+            # --- 【新增修改点 8】: 确保基线值显示在Y轴上 ---
+            if custom_yticks:
+                # 获取matplotlib自动生成的Y轴刻度
+                current_ticks = list(plt.yticks()[0])
+                # 合并自动刻度和我们的基线刻度，去重并排序
+                new_ticks = sorted(list(set(current_ticks) | custom_yticks))
+                # 设置新的Y轴刻度
+                plt.yticks(new_ticks)
+            
+            # --- 【新增修改点 9】: 调整图例位置 ---
+            plt.legend(loc='upper right')
+            
             plt.grid(True, linestyle='--', alpha=0.6)
             plt.tight_layout()
             

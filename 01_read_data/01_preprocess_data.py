@@ -132,7 +132,7 @@ def extract_sheet_data_integrated(file_path: str, sheet_name: str) -> Optional[D
         return {"steel_coil_id": steel_coil_id, "data": data_df}
     
     except Exception as e:
-        # 捕获并打印处理过程中的异常
+        # 处理异常情况
         print(f"    [警告] 处理文件 '{os.path.basename(file_path)}' 的工作表 '{sheet_name}' 时出错: {e}")
         return None
 
@@ -188,8 +188,8 @@ def main():
         # 将所有DataFrame合并成一个
         combined_df = pd.concat(all_coil_dfs, ignore_index=True)
         
-        # 保存为Parquet格式，这种格式读取速度快，占用空间小
-        # 如果需要，请先安装 pyarrow: pip install pyarrow
+        # 保存为Parquet格式，读取速度快，占用空间小
+        # 需要安装 pyarrow: pip install pyarrow
         combined_df.to_parquet(PREPROCESSED_OUTPUT_FILE, index=False)
         print(f"    成功！所有数据已合并并保存至: {PREPROCESSED_OUTPUT_FILE}")
         print(f"    - 总行数: {len(combined_df)}")
@@ -198,7 +198,7 @@ def main():
         
     except Exception as e:
         print(f"    [严重错误] 保存Parquet文件时失败: {e}")
-        print("    请确保您已安装 'pyarrow' 库 (pip install pyarrow)。")
+        print("    请确保已安装 'pyarrow' 库 (pip install pyarrow)。")
 
     print("\n--- 所有预处理任务完成 ---")
 

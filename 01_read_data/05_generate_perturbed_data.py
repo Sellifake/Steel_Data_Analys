@@ -66,7 +66,6 @@ PERTURBATION_CONFIG = {
 
 def sanitize_filename(filename):
     """
-    (复制自 01a_random_forest_modeling.py)
     清洗文件名中的非法字符。
     """
     return re.sub(r'[\\/*?:"<>|]', '_', filename)
@@ -178,7 +177,7 @@ def main():
         print(f"    将为 {n_original} 条原始数据生成 {n_perturb} 个扰动点")
         print(f"    总计生成新样本数: {total_samples}")
 
-        # 2a. 生成大型扰动数据集 (包含所有17个特征)
+        # 生成大型扰动数据集 (包含所有特征)
         print("    正在生成扰动特征矩阵...")
         df_perturbed_features, perturb_tiled = create_perturbed_dataset(
             original_x_data, 
@@ -186,12 +185,12 @@ def main():
             perturbation_values
         )
         
-        # 2b. 准备ID和扰动值列 (用于合并)
+        # 准备ID和扰动值列 (用于合并)
         print("    正在准备ID和扰动值 (delta) 列...")
         # 重复ID，使其与 N * M 行匹配
         id_repeated = np.repeat(original_id_data.values, n_perturb)
         
-        # 2c. 组合成最终的输出DataFrame
+        # 组合成最终的输出DataFrame
         # 目标: [ID, 扰动值, 特征1, 特征2, ..., 特征17]
         
         # 复制特征数据
@@ -203,7 +202,7 @@ def main():
         # 插入 '扰动值' (例如 -10, -9, ..., 10, -10, ...)
         results_df.insert(1, '扰动值', perturb_tiled)
 
-        # 2d. 缺失值检测与清洗
+        # 缺失值检测与清洗
         # 规则: 若一行（除ID列）全为0或空，则删除；随后将剩余NaN填充为0
         vals = results_df.drop(columns=[ID_COLUMN]).replace(r'^\s*$', np.nan, regex=True)
         numeric_vals = vals.apply(pd.to_numeric, errors='coerce')
@@ -214,7 +213,7 @@ def main():
         results_df = results_df.loc[np.logical_not(mask_all_zero_or_nan)].reset_index(drop=True)
         results_df = results_df.fillna(0)
 
-        # 2e. 保存结果
+        # 保存结果
         safe_feature_name = sanitize_filename(feature_name)
         
         output_filename = f'05_perturbed_dataset_{safe_feature_name}.csv'

@@ -4,13 +4,13 @@
 本脚本的核心功能是将化学成分和性能指标合并到数据集中，其主要流程如下：
 1.  加载由02代码生成的工艺特征数据 (extract_data.xlsx) 作为基准。
 2.  从 performance 文件夹中高效读取所有性能与化学数据。
-3.  从性能数据中，仅筛选出必需的列（钢卷号、指定的性能指标和化学成分）。
+3.  从性能数据中，仅筛选出必需的列（钢卷号、指定的性能指标、化学成分以及新增的工艺特征）。
 4.  以工艺特征数据为基准，进行左合并（left join），确保数据集的行数和基准一致。
 5.  强制类型转换，确保所有分析列都为数值类型。
-6.  进行详细、步骤清晰的基础数据清洗（缺失值的判断，删除缺失值所在列），并打印每一步操作的原因和移除的行数。
+6.  进行详细、步骤清晰的基础数据清洗（缺失值的判断，删除缺失值所在列）。
 7.  严格按照“工艺特征->化学成分->性能指标”的顺序排列最终列。
-8.  保存一份合并和初步清洗后的完整数据集，作为后续步骤的输入。
-9.  对这份完整数据集进行全面的探索性分析（相关性、VIF、数据分布直方图、散点图），为特征选择提供依据。
+8. 保存一份合并和初步清洗后的完整数据集，作为后续步骤的输入。
+9. 对这份完整数据集进行全面的探索性分析（相关性、VIF、数据分布直方图、散点图），为特征选择提供依据。
 """
 import pandas as pd
 import numpy as np
@@ -45,9 +45,20 @@ CHEMISTRY_COLUMNS = [
     "钛含量", "铌含量", "氧含量", "氮含量"
 ]
 
+# 需要从性能文件中提取的额外工艺特征
+ADDITIONAL_PROCESS_FEATURES = [
+    '退火卷宽度', '冷轧入口厚度', '冷轧生产实际厚度', '热轧在炉时间',
+    '热轧精轧入口平均温度', '热轧精轧出口平均温度', '热轧卷取平均温度'
+]
+
 # --- 【绘图设置】 ---
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS']
 plt.rcParams['axes.unicode_minus'] = False
+
+# 全局EDA绘图控制开关
+# True: 执行步骤6.3，生成所有直方图和散点图 (耗时)
+# False: 跳过步骤6.3，不生成图表 (仍会计算VIF和相关性CSV)
+RUN_EDA_PLOTTING = True
 
 
 # --- 2. 辅助与核心分析函数 ---
@@ -60,7 +71,7 @@ def load_and_prepare_performance_data(folder_path: str) -> pd.DataFrame | None:
     """
     高效加载、合并并准备性能与化学数据。
     1. 高效读取所有Excel文件。
-    2. **仅筛选出必需的列**。
+    2. **仅筛选出必需的列** (包含新增工艺特征)。
     3. 根据钢卷号去重，确保唯一性。
     """
     print(f"--- 步骤 1.2/6: 扫描文件夹 '{folder_path}' 并准备性能/化学数据 ---")
@@ -101,7 +112,8 @@ def load_and_prepare_performance_data(folder_path: str) -> pd.DataFrame | None:
     combined_perf_df = pd.concat(all_dfs, ignore_index=True)
     print(f"    读取完成，共合并 {len(combined_perf_df)} 行原始性能/化学记录。")
 
-    required_cols = [ID_COLUMN] + PERFORMANCE_METRICS + CHEMISTRY_COLUMNS
+    # 将 ADDITIONAL_PROCESS_FEATURES 添加到必需列中
+    required_cols = [ID_COLUMN] + PERFORMANCE_METRICS + CHEMISTRY_COLUMNS + ADDITIONAL_PROCESS_FEATURES
     existing_required_cols = [col for col in required_cols if col in combined_perf_df.columns]
     
     if ID_COLUMN not in existing_required_cols:
@@ -206,7 +218,8 @@ def main():
         print(f"    [错误] 特征文件不存在。请先运行 '02_read_data.py'。")
         return
     df_feature = pd.read_excel(BASE_FEATURE_FILE)
-    process_feature_cols = df_feature.columns.tolist()
+    # 存储来自 02_read_data.py 的原始工艺特征列名
+    process_feature_cols = df_feature.columns.tolist() 
     print(f"    加载成功，基准数据集包含 {len(df_feature)} 条工艺记录。")
 
     df_performance_prepared = load_and_prepare_performance_data(PERFORMANCE_DATA_FOLDER)
@@ -262,19 +275,79 @@ def main():
     
     print(f"\n    清洗完成，最终剩余 {len(df_merged)} 行有效数据。")
 
-    # --- 步骤 4: 重新排列列顺序 ---
+    # 步骤 3.5: 对指定的新增特征进行中位数填充
+    print("\n--- 步骤 3.5/6: 对新增工艺特征执行中位数填充 ---")
+    for col in ADDITIONAL_PROCESS_FEATURES:
+        if col in df_merged.columns:
+            # 1. 检查是否存在缺失值
+            missing_count = df_merged[col].isnull().sum()
+            if missing_count > 0:
+                # 2. 计算中位数
+                median_val = df_merged[col].median()
+                # 3. 填充
+                df_merged[col].fillna(median_val, inplace=True)
+                print(f"    [填充] 特征 '{col}': {missing_count} 个缺失值已用中位数 ({median_val:.4f}) 填充。")
+            else:
+                print(f"    [跳过] 特征 '{col}': 无缺失值。")
+        else:
+            print(f"    [警告] 特征 '{col}': 在数据集中不存在，跳过填充。")
+
+    # 步骤 3.6: 计算新特征 '压下率'
+    print("\n--- 步骤 3.6/6: 计算新特征 '压下率' ---")
+    if '冷轧入口厚度' in df_merged.columns and '冷轧生产实际厚度' in df_merged.columns:
+        # 确保分母（冷轧入口厚度）不为0
+        denominator = df_merged['冷轧入口厚度']
+        numerator = df_merged['冷轧入口厚度'] - df_merged['冷轧生产实际厚度']
+        
+        # 使用 np.where 避免除零错误
+        df_merged['压下率'] = np.where(denominator == 0, 0, numerator / denominator)
+        print("    [成功] 已计算新特征 '压下率'。")
+    else:
+        print("    [警告] 计算'压下率'失败：缺少'冷轧入口厚度'或'冷轧生产实际厚度'列。")
+
+
+    # 步骤 4: 重新排列列顺序
     print("\n--- 步骤 4/6: 按照“工艺-化学-性能”顺序重新排列数据列 ---")
     
-    process_cols_final = [col for col in process_feature_cols if col in df_merged.columns]
+    # 1. 原始工艺特征 (来自 02_read_data.py, 排除ID)
+    process_cols_final = [col for col in process_feature_cols if col in df_merged.columns and col != ID_COLUMN]
+    
+    # 2. 新增工艺特征 (来自 performance 文件夹)
+    new_process_cols_final = [col for col in ADDITIONAL_PROCESS_FEATURES if col in df_merged.columns]
+    
+    # 3. 添加 '压下率' (如果存在)
+    if '压下率' in df_merged.columns and '压下率' not in new_process_cols_final:
+        new_process_cols_final.append('压下率')
+    
+    # 4. 化学成分
     chem_cols_final = [col for col in CHEMISTRY_COLUMNS if col in df_merged.columns]
+    
+    # 5. 性能指标
     perf_cols_final = [col for col in PERFORMANCE_METRICS if col in df_merged.columns]
 
-    final_column_order = process_cols_final + chem_cols_final + perf_cols_final
-    if ID_COLUMN in final_column_order:
-        final_column_order.remove(ID_COLUMN)
-        final_column_order.insert(0, ID_COLUMN)
+    # 6. 组合所有期望的列
+    # 顺序：ID -> (原始工艺) -> (新增工艺+压下率) -> (化学) -> (性能)
+    expected_order = [ID_COLUMN] + process_cols_final + new_process_cols_final + chem_cols_final + perf_cols_final
+    
+    # 7. 去重并保留顺序 (使用 dict.fromkeys)
+    ordered_cols = list(dict.fromkeys(expected_order))
+    
+    # 8. 找出遗漏的列 (存在于数据框但未被定义的列)
+    defined_set = set(ordered_cols)
+    all_cols_set = set(df_merged.columns)
+    other_cols = [col for col in df_merged.columns if col not in defined_set]
+    
+    if other_cols:
+        print(f"    [警告] 发现未明确排序的列: {other_cols}。已将它们放置在化学成分之前。")
+        # 将 "other_cols" 插入到化学成分之前
+        final_column_order = [ID_COLUMN] + process_cols_final + new_process_cols_final + other_cols + chem_cols_final + perf_cols_final
+        # 再次去重
+        ordered_cols = list(dict.fromkeys(final_column_order))
+    
+    # 9. 确保最终列表中的所有列都实际存在于 df_merged 中
+    final_columns = [col for col in ordered_cols if col in df_merged.columns]
         
-    df_final = df_merged[final_column_order]
+    df_final = df_merged[final_columns]
     print(f"    列顺序重排完成。最终数据集包含 {len(df_final.columns)} 列。")
 
 
@@ -288,10 +361,15 @@ def main():
     print("\n--- 步骤 6/6: 对清洗后的完整数据进行全面EDA ---")
     analyze_correlations(df_final, RESULTS_DIR)
     analyze_vif(df_final, RESULTS_DIR)
-    perform_eda_plotting(df_final, os.path.join(RESULTS_DIR, EDA_PLOT_DIR))
+    
+    # 根据全局开关决定是否执行绘图
+    if RUN_EDA_PLOTTING:
+        perform_eda_plotting(df_final, os.path.join(RESULTS_DIR, EDA_PLOT_DIR))
+    else:
+        print("--- 步骤 6.3/6: 已跳过生成EDA图表 (RUN_EDA_PLOTTING = False) ---")
 
     print("\n" + "=" * 60)
-    print("--- 步骤2全部任务完成 ---")
+    print("--- 步骤3全部任务完成 ---")
     print("=" * 60)
 
 if __name__ == '__main__':

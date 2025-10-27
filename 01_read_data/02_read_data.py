@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 # --- 【路径配置】 ---
 PREPROCESSED_INPUT_FILE = 'all_coils_data.parquet'
-OUTPUT_FILENAME = 'results/extract_data.xlsx'
+OUTPUT_FILENAME = 'results/02_extract_data.xlsx'
 COIL_IDS_FILENAME = 'steel_coil_ids.txt'
 SPLIT_COIL_IDS_FOLDER = '钢卷编号'
 

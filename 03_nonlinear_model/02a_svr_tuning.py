@@ -69,13 +69,15 @@ svr_param_dist = {
 # --- 3. 辅助函数 ---
 
 def sanitize_filename(filename):
-    """清洗文件名中的非法字符。"""
+    """
+    清洗文件名中的非法字符，确保文件名符合系统要求
+    """
     return re.sub(r'[\\/*?:"<>|]', '_', filename)
 
 def plot_permutation_importance(model, X_train, y_train, feature_names, metric_name, model_name_prefix, output_dir):
     """
-    (复制自 01a)
-    计算并可视化排列重要性。
+    计算并可视化排列重要性
+    通过随机打乱特征值来评估特征对模型性能的影响
     """
     print("    - 正在计算排列重要性 (Permutation Importance)...")
     print("    (这可能需要几秒钟，因为它需要多次重新预测...)")
@@ -126,7 +128,10 @@ def plot_permutation_importance(model, X_train, y_train, feature_names, metric_n
 # --- 4. 主执行函数 ---
 
 def main():
-    """主执行函数"""
+    """
+    主执行函数
+    执行SVR超参数调优和建模的完整流程
+    """
     print("=" * 60)
     print("--- 启动脚本: 02a_svr_tuning.py ---")
     print(f"--- 目的: SVR(RBF核)超参数调优 (N_Iter={N_ITER_SEARCH}) ---")
@@ -161,7 +166,7 @@ def main():
     all_cv_performance_summary = []
 
     for metric in Y_all.columns:
-        print(f"\n\n{'='*20} 正在为性能指标: '{metric}' 进行调优 (SVR) {'='*20}")
+        print(f"\n\n{'='*20} 正在为性能指标: '{metric}' 进行SVR超参数调优 {'='*20}")
         safe_metric_name = sanitize_filename(metric)
 
         # 准备数据
@@ -173,7 +178,7 @@ def main():
         X_train = metric_data[X_all.columns]
         y_train = metric_data[metric]
         
-        # --- 2a. 定义处理流程 Pipeline (作为调优的基础) ---
+        # --- 2a. 定义处理流程Pipeline作为调优基础 ---
         scaler = StandardScaler()
         svr = SVR(kernel='rbf') 
         pipeline = Pipeline([
@@ -181,7 +186,7 @@ def main():
             ('svr', svr)
         ])
 
-        # --- 2b. (1/3) [新增] 执行 RandomizedSearchCV ---
+        # --- 2b. 执行RandomizedSearchCV超参数调优 ---
         print(f"\n--- (1/3) 正在执行 {N_ITER_SEARCH} 次迭代的 {K_FOLDS}-折交叉验证调优 ---")
         kfold = KFold(n_splits=K_FOLDS, shuffle=True, random_state=RANDOM_STATE)
         
@@ -201,7 +206,7 @@ def main():
         print(f"    调优完成。最佳R2 (Tuning): {search.best_score_:.4f}")
         print(f"    最佳参数: {search.best_params_}")
 
-        # --- 2c. (2/3) 使用最佳模型重新评估所有指标 ---
+        # --- 2c. 使用最佳参数重新评估所有性能指标 ---
         print(f"    正在使用最佳参数重新运行交叉验证以获取所有指标...")
         
         # search.best_estimator_ 是 *已经* 在全部数据上 refit 过的最终模型
@@ -227,7 +232,7 @@ def main():
         })
         print(f"    CV完成 (平均值): R2={mean_r2:.4f}, MAE={mean_mae:.4f}, RMSE={mean_rmse:.4f}")
 
-        # --- 2d. (3/3) 训练最终模型并保存 ---
+        # --- 2d. 训练最终模型并保存到磁盘 ---
         print("\n--- (3/3) 正在保存最终模型 ---")
         
         # final_model (search.best_estimator_) 已经被 RandomizedSearchCV 在全部数据上训练过了
@@ -242,7 +247,7 @@ def main():
         joblib.dump(final_model, model_path)
         print(f"    Pipeline (Scaler+SVR_Tuned) 已保存至: {model_path}")
 
-        # --- 2e. (4/4) 模型解释 (Permutation Importance) ---
+        # --- 2e. 进行模型解释和特征重要性分析 ---
         print("\n--- (4/4) 正在进行模型解释 (特征重要性) ---")
         
         plot_permutation_importance(
@@ -266,7 +271,7 @@ def main():
         print(f"\n交叉验证性能汇总表已保存至: {summary_path}")
 
     print("\n" + "=" * 60)
-    print("--- 步骤 02a (SVR Tuning) 全部任务完成 ---")
+    print("--- SVR超参数调优任务全部完成 ---")
     print("=" * 60)
 
 if __name__ == '__main__':
