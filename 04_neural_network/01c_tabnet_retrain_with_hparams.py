@@ -1,28 +1,27 @@
 # -*- coding: utf-8 -*-
 """
 文件名: 01c_tabnet_retrain_with_hparams.py
-(注意: 此脚本应放置在 04_neural_network 文件夹中)
 
 功能: 
-    1. 【手动定义】已知晓的最优超参数。
-    2. 加载最终数据集。
-    3. [跳过] 不执行 Optuna 或 K-折调参。
-    4. [重构] 将数据分为 训练集(85%) 和 验证集(15%)。
-    5. 使用已知的超参数, 在 训练集 上训练最终模型, 在 验证集 上早停。
-    6. 保存模型 (Pipeline + .zip)。
-    7. 提取特征重要性。
+    1. 使用预定义的最优超参数
+    2. 加载最终数据集
+    3. 跳过超参数搜索，直接使用已知参数
+    4. 将数据分为训练集(85%)和验证集(15%)
+    5. 使用已知超参数在训练集上训练最终模型，在验证集上早停
+    6. 保存模型(Pipeline + .zip)
+    7. 提取特征重要性
 """
 
-# --- 0. 并行与GPU控制 ---
+# GPU和并行控制配置
 import os
 import torch
 
-# --- GPU配置 ---
-GPU_DEVICE_ID = 0  # 指定你希望使用的GPU卡号 (0, 1, 2, 3)
+# GPU设备配置
+GPU_DEVICE_ID = 0  # 指定使用的GPU卡号
 os.environ["CUDA_VISIBLE_DEVICES"] = str(GPU_DEVICE_ID)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# 限制Pytorch和Numpy的CPU线程数
+# 限制CPU线程数
 N_CPU_WORKERS = 4
 torch.set_num_threads(N_CPU_WORKERS)
 os.environ["OMP_NUM_THREADS"] = str(N_CPU_WORKERS)

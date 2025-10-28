@@ -17,6 +17,12 @@ lightgbm>=3.3.0
 torch>=1.12.0
 pytorch-tabnet>=4.0
 
+# 超参数优化
+optuna>=3.0.0
+
+# 模型解释
+shap>=0.41.0
+
 # 数据可视化
 matplotlib>=3.5.0
 seaborn>=0.11.0

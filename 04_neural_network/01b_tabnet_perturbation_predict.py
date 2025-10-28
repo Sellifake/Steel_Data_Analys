@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 文件名: 01b_tabnet_perturbation_predict.py
-(注意: 此脚本应放置在 04_neural_network 文件夹中)
 
 功能: 
-    1. 加载 01a 脚本训练好的 TabNet Pipeline (Scaler) 和模型权重 (.zip)。
-    2. 加载 05 (01_read_data) 脚本生成的扰动数据集。
-    3. [新增] 清洗扰动数据，移除所有特征列均为空(NaN)或0的行，并用0填充剩余NaN。
-    4. 使用 TabNet Pipeline 对*清洗后*的数据集进行批量预测 (np.float32)。
-    5. 保存详细的原始预测结果 (ICE)。
-    6. 对预测结果按“扰动值”进行分组统计 (PDP)。
-    7. [修改] 绘制并保存 PDP 效应图 (带 95% 置信区间和性能基线)。
+    1. 加载训练好的TabNet Pipeline和模型权重
+    2. 加载扰动数据集
+    3. 清洗扰动数据，移除空行并用0填充剩余NaN
+    4. 使用TabNet Pipeline对清洗后的数据集进行批量预测
+    5. 保存详细的原始预测结果(ICE)
+    6. 对预测结果按扰动值进行分组统计(PDP)
+    7. 绘制并保存PDP效应图(带95%置信区间和性能基线)
 """
 
 import pandas as pd
@@ -21,18 +20,18 @@ import joblib
 from tqdm import tqdm 
 import matplotlib.pyplot as plt
 
-# --- [关键] 导入 Pipeline 依赖 ---
+# 导入Pipeline相关依赖
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from pytorch_tabnet.tab_model import TabNetRegressor
 
-# --- 【新增修改点 1】: GPU配置 (确保预测也在GPU上运行) ---
+# GPU配置
 import torch
 GPU_DEVICE_ID = 0
 os.environ["CUDA_VISIBLE_DEVICES"] = str(GPU_DEVICE_ID)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# --- 1. 配置区 ---
+# 配置参数
 
 # --- 路径配置 ---
 MODEL_IO_DIR = 'results/01_tabnet_results'

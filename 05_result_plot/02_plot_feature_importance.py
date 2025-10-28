@@ -4,8 +4,8 @@
 功能: 
     1. 读取所有模型的特征重要性CSV文件
     2. 统计前5个重要特征的出现次数
-    3. 统计最后5个重要特征的出现次数
-    4. 保存统计结果到CSV文件
+    3. 统计后5个重要特征的出现次数
+    4. 保存统计结果到CSV文件并生成可视化图表
 """
 
 import pandas as pd
@@ -36,10 +36,6 @@ def load_feature_importance_data():
         filename = os.path.basename(file_path)
         
         # 解析文件名获取模型名和性能指标
-        # 文件名格式: {model_name}_{metric}_feature_importance.csv
-        parts = filename.replace('_feature_importance.csv', '').split('_')
-        
-        # 确定模型名
         model_name = None
         metric = None
         

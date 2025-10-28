@@ -3,7 +3,7 @@
 文件名: 01_plot_model_performance.py
 功能: 
     1. 读取所有模型的性能指标CSV文件
-    2. 为三个性能指标分别绘制对比图，显示6个模型的性能
+    2. 为三个性能指标分别绘制对比图，显示各模型的性能
     3. 生成柱状图展示R²、MAE、RMSE指标
 """
 
@@ -34,7 +34,7 @@ def load_all_model_data():
     """加载所有模型的性能数据"""
     all_data = []
     
-    # 1. 随机森林数据（没有模型列）
+    # 加载随机森林数据
     rf_file = os.path.join(INPUT_DIR, 'random_forest_performance_summary.csv')
     if os.path.exists(rf_file):
         rf_data = pd.read_csv(rf_file)
@@ -42,7 +42,7 @@ def load_all_model_data():
         all_data.append(rf_data)
         print(f"已加载随机森林数据: {len(rf_data)} 条记录")
     
-    # 2. XGBoost数据（没有模型列）
+    # 加载XGBoost数据
     xgb_file = os.path.join(INPUT_DIR, 'xgboost_tuned_performance_summary.csv')
     if os.path.exists(xgb_file):
         xgb_data = pd.read_csv(xgb_file)
@@ -50,7 +50,7 @@ def load_all_model_data():
         all_data.append(xgb_data)
         print(f"已加载XGBoost数据: {len(xgb_data)} 条记录")
     
-    # 3. LightGBM数据（没有模型列）
+    # 加载LightGBM数据
     lgb_file = os.path.join(INPUT_DIR, 'lightgbm_tuned_performance_summary.csv')
     if os.path.exists(lgb_file):
         lgb_data = pd.read_csv(lgb_file)
@@ -58,14 +58,14 @@ def load_all_model_data():
         all_data.append(lgb_data)
         print(f"已加载LightGBM数据: {len(lgb_data)} 条记录")
     
-    # 4. SVR数据（有模型列）
+    # 加载SVR数据
     svr_file = os.path.join(INPUT_DIR, 'svr_tuned_performance_summary.csv')
     if os.path.exists(svr_file):
         svr_data = pd.read_csv(svr_file)
         all_data.append(svr_data)
         print(f"已加载SVR数据: {len(svr_data)} 条记录")
     
-    # 5. TabNet数据（现在有完整的三个指标）
+    # 加载TabNet数据
     tabnet_file = os.path.join(INPUT_DIR, 'TabNet_performance_summary.csv')
     if os.path.exists(tabnet_file):
         tabnet_data = pd.read_csv(tabnet_file)

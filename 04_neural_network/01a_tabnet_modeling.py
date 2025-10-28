@@ -1,29 +1,28 @@
 # -*- coding: utf-8 -*-
 """
 文件名: 01a_tabnet_modeling.py
-(注意: 此脚本应放置在 04_neural_network 文件夹中)
 
 功能: 
-    1. 加载最终数据集。
-    2. [重构] 启用GPU训练 (可指定GPU ID)。
-    3. [重构] 将数据分为 训练集(K折调参) 和 验证集(最终早停)。
-    4. [重构] 使用 Optuna (贝叶斯优化) 替代 随机搜索, 进行K-折交叉验证。
-    5. [重构] 在Optuna调参阶段即计算R2, MAE, RMSE均值。
-    6. [新增] 调参后立即保存最优超参至 .txt 文件, 作为备份。
-    7. [新增] 训练/保存最终模型时捕获异常, 确保单个模型失败不会中断整个脚本。
-    8. 提取 TabNet 内置的 'feature_importances_'。
+    1. 加载最终数据集
+    2. 启用GPU训练，支持指定GPU设备
+    3. 将数据分为训练集(K折调参)和验证集(最终早停)
+    4. 使用Optuna贝叶斯优化进行K折交叉验证
+    5. 在调参阶段计算R2、MAE、RMSE均值
+    6. 调参后保存最优超参数到txt文件作为备份
+    7. 训练和保存最终模型时捕获异常，确保单个模型失败不会中断整个脚本
+    8. 提取TabNet内置的特征重要性
 """
 
-# --- 0. 并行与GPU控制 ---
+# GPU和并行控制配置
 import os
 import torch
 
-# --- GPU配置 ---
-GPU_DEVICE_ID = 0  # 指定你希望使用的GPU卡号 (0, 1, 2, 3)
+# GPU设备配置
+GPU_DEVICE_ID = 0  # 指定使用的GPU卡号
 os.environ["CUDA_VISIBLE_DEVICES"] = str(GPU_DEVICE_ID)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# 限制Pytorch和Numpy的CPU线程数 (防止数据加载瓶颈)
+# 限制CPU线程数，避免数据加载瓶颈
 N_CPU_WORKERS = 4
 torch.set_num_threads(N_CPU_WORKERS)
 os.environ["OMP_NUM_THREADS"] = str(N_CPU_WORKERS)
@@ -45,59 +44,57 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from pytorch_tabnet.tab_model import TabNetRegressor
 import optuna
 
-# --- 1. 配置区 ---
-
-# --- 输入/输出文件配置 ---
+# 配置参数
 INPUT_DIR = '../01_read_data/results'
 OUTPUT_DIR = 'results/01_tabnet_results' 
 CLEANED_DATA_FILE = '04_data_selected.xlsx'
 
-# --- 列定义 ---
+# 数据列定义
 ID_COLUMN = '罩退钢卷号'
 PERFORMANCE_METRICS = ["抗拉强度", "屈服Rp0.2值*", "断后伸长率"]
 
-# --- 模型配置 ---
+# 模型训练配置
 RANDOM_STATE = 42
 K_FOLDS = 5
 MODEL_NAME_PREFIX = '01a_TabNet' 
 
-# TabNet 训练参数
-TABNET_EPOCHS = 300         # 较高上限配合早停
-TABNET_PATIENCE = 30        # 早停耐心
+# TabNet训练参数
+TABNET_EPOCHS = 300         # 训练轮数上限
+TABNET_PATIENCE = 30        # 早停耐心值
 TABNET_BATCH_SIZE = 1024    # 批次大小
 
-# Optuna配置
-N_TRIALS_OPTUNA = 40        # Optuna 优化的迭代次数
-VALIDATION_SPLIT_SIZE = 0.15 # 从总数据中分出15%作为最终模型的验证集
+# Optuna优化配置
+N_TRIALS_OPTUNA = 40        # 优化迭代次数
+VALIDATION_SPLIT_SIZE = 0.15 # 验证集比例
 
-# --- Matplotlib 设置 ---
+# 图表字体设置
 plt.rcParams['font.sans-serif'] = ['SimHei'] 
 plt.rcParams['axes.unicode_minus'] = False 
 
 
-# --- 2. 辅助函数 ---
+# 辅助函数
 
 def sanitize_filename(filename):
-    """清洗文件名中的非法字符。"""
+    """清理文件名中的非法字符"""
     return re.sub(r'[\\/*?:"<>|]', '_', filename)
 
 def plot_tabnet_importance(model, feature_names, metric_name, model_name_prefix, output_dir):
-    """
-    提取 TabNet 的 feature_importances_ 并可视化。
-    """
-    print("    - 正在提取 TabNet 内置特征重要性...")
+    """提取TabNet特征重要性并生成可视化图表"""
+    print("    - 正在提取TabNet特征重要性...")
     try:
-        # 在 Pipeline 中, model 位于 'model' 步骤
+        # 从Pipeline中获取模型的特征重要性
         importance = model.named_steps['model'].feature_importances_
         importance_df = pd.DataFrame({
             'Feature': feature_names,
             'Importance (TabNet)': importance
         }).sort_values(by='Importance (TabNet)', ascending=False)
         
+        # 保存CSV文件
         csv_filename = f'{metric_name}_feature_importance.csv'
         csv_path = os.path.join(output_dir, csv_filename)
         importance_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
         
+        # 生成图表
         plt.figure(figsize=(12, 8))
         importance_df.head(20).sort_values(by='Importance (TabNet)', ascending=True).plot(
             kind='barh', x='Feature', y='Importance (TabNet)', 
@@ -112,18 +109,18 @@ def plot_tabnet_importance(model, feature_names, metric_name, model_name_prefix,
         plot_path = os.path.join(output_dir, plot_filename)
         plt.savefig(plot_path, dpi=120)
         plt.close()
-        print(f"    - TabNet 特征重要性分析完成 (CSV和图表已保存)。")
+        print(f"    - TabNet特征重要性分析完成")
     except Exception as e:
-        print(f"    [错误] TabNet 特征重要性分析失败: {e}")
+        print(f"    [错误] TabNet特征重要性分析失败: {e}")
 
-# --- 3. 主执行函数 ---
+# 主执行函数
 
 def main():
     """主执行函数"""
     print("=" * 60)
-    print("--- 启动脚本: 01a_tabnet_modeling.py (Optuna + GPU + 鲁棒性保存) ---")
-    print(f"--- 目的: Optuna(K折)→以R2选优→全量重训→重要性 ---")
-    print(f"--- (Device={device}, Epochs={TABNET_EPOCHS}, Patience={TABNET_PATIENCE}, Trials={N_TRIALS_OPTUNA}) ---")
+    print("--- 启动脚本: 01a_tabnet_modeling.py ---")
+    print(f"--- 目的: 使用Optuna进行超参数优化，训练TabNet模型 ---")
+    print(f"--- 设备: {device}, 训练轮数: {TABNET_EPOCHS}, 早停耐心: {TABNET_PATIENCE}, 优化次数: {N_TRIALS_OPTUNA} ---")
     print(f"--- 输出目录: {OUTPUT_DIR} ---")
     print("=" * 60)
     
@@ -153,41 +150,41 @@ def main():
     
     all_cv_performance_summary = []
     
-    # 禁用 Optuna 的啰嗦日志
+    # 设置Optuna日志级别
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-    # --- 【新增修改点 1】: 定义超参数备份文件名 ---
+    # 定义超参数备份文件
     hparams_txt_path = os.path.join(OUTPUT_DIR, f'{MODEL_NAME_PREFIX}_best_hparams.txt')
-    # 启动时清空旧的备份文件
+    # 清空旧的备份文件
     if os.path.exists(hparams_txt_path):
         os.remove(hparams_txt_path)
         print(f"已清除旧的超参数备份文件: {hparams_txt_path}")
 
-    # --- 2. 循环执行模型训练 ---
+    # 循环训练各性能指标的模型
     for metric in Y_all.columns:
-        print(f"\n\n{'='*20} 正在为性能指标: '{metric}' 进行建模 (TabNet) {'='*20}")
+        print(f"\n\n{'='*20} 正在为性能指标: '{metric}' 进行建模 {'='*20}")
         safe_metric_name = sanitize_filename(metric)
 
-        # 准备数据 (TabNet 需要 1D y)
+        # 准备数据
         metric_data = pd.concat([X_all, Y_all[metric]], axis=1).dropna(subset=[metric])
         if metric_data.empty:
-            print(f"    [警告] 移除 Y 为 NaN 的行后，没有剩余数据可用于评估 '{metric}'，跳过。")
+            print(f"    [警告] 移除Y为NaN的行后，没有剩余数据可用于评估 '{metric}'，跳过。")
             continue
         
-        # 转换为 np.float32
+        # 转换为float32格式
         X_full = metric_data[X_all.columns].values.astype(np.float32)
         y_full = metric_data[metric].values.astype(np.float32)
 
-        # 创建训练集(K折调参) 和 验证集(最终早停)
+        # 创建训练集和验证集
         X_train, X_val_final, y_train, y_val_final = train_test_split(
             X_full, y_full, 
             test_size=VALIDATION_SPLIT_SIZE, 
             random_state=RANDOM_STATE
         )
-        print(f"    数据拆分: K-Fold调参集 {X_train.shape[0]} 行, 最终验证集 {X_val_final.shape[0]} 行。")
+        print(f"    数据拆分: 训练集 {X_train.shape[0]} 行, 验证集 {X_val_final.shape[0]} 行。")
 
-        # --- 2a. (1/3) Optuna 超参搜索 + K折交叉验证 ---
-        print(f"\n--- (1/3) 正在执行 Optuna 超参搜索 (共 {K_FOLDS}-折, 迭代 {N_TRIALS_OPTUNA} 次) ---")
+        # Optuna超参数搜索和K折交叉验证
+        print(f"\n--- 正在执行Optuna超参数搜索 (共{K_FOLDS}折, 迭代{N_TRIALS_OPTUNA}次) ---")
         kfold = KFold(n_splits=K_FOLDS, shuffle=True, random_state=RANDOM_STATE)
 
         # 定义 Optuna 的目标函数
