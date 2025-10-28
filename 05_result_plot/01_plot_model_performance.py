@@ -26,7 +26,6 @@ MODEL_NAMES = {
     'RandomForest': '随机森林',
     'XGBoost_Tuned': 'XGBoost',
     'LightGBM_Tuned': 'LightGBM', 
-    '01_GPR_Tuned': '高斯过程回归',
     '02_SVR_Tuned': '支持向量回归',
     '01a_TabNet': 'TabNet'
 }
@@ -41,38 +40,38 @@ def load_all_model_data():
         rf_data = pd.read_csv(rf_file)
         rf_data['模型'] = 'RandomForest'
         all_data.append(rf_data)
+        print(f"已加载随机森林数据: {len(rf_data)} 条记录")
     
-    # 2. XGBoost和LightGBM数据（在同一个文件中）
-    boosting_file = os.path.join(INPUT_DIR, 'boosting_tuned_performance_summary.csv')
-    if os.path.exists(boosting_file):
-        boosting_data = pd.read_csv(boosting_file)
-        # 重命名模型列
-        boosting_data['模型'] = boosting_data['模型'].replace({
-            'XGBoost_Tuned': 'XGBoost_Tuned',
-            'LightGBM_Tuned': 'LightGBM_Tuned'
-        })
-        all_data.append(boosting_data)
+    # 2. XGBoost数据（没有模型列）
+    xgb_file = os.path.join(INPUT_DIR, 'xgboost_tuned_performance_summary.csv')
+    if os.path.exists(xgb_file):
+        xgb_data = pd.read_csv(xgb_file)
+        xgb_data['模型'] = 'XGBoost_Tuned'
+        all_data.append(xgb_data)
+        print(f"已加载XGBoost数据: {len(xgb_data)} 条记录")
     
-    # 3. GPR数据
-    gpr_file = os.path.join(INPUT_DIR, 'gpr_tuned_performance_summary.csv')
-    if os.path.exists(gpr_file):
-        gpr_data = pd.read_csv(gpr_file)
-        all_data.append(gpr_data)
+    # 3. LightGBM数据（没有模型列）
+    lgb_file = os.path.join(INPUT_DIR, 'lightgbm_tuned_performance_summary.csv')
+    if os.path.exists(lgb_file):
+        lgb_data = pd.read_csv(lgb_file)
+        lgb_data['模型'] = 'LightGBM_Tuned'
+        all_data.append(lgb_data)
+        print(f"已加载LightGBM数据: {len(lgb_data)} 条记录")
     
-    # 4. SVR数据
+    # 4. SVR数据（有模型列）
     svr_file = os.path.join(INPUT_DIR, 'svr_tuned_performance_summary.csv')
     if os.path.exists(svr_file):
         svr_data = pd.read_csv(svr_file)
         all_data.append(svr_data)
+        print(f"已加载SVR数据: {len(svr_data)} 条记录")
     
-    # 5. TabNet数据（只有R2分数）
-    tabnet_file = os.path.join(INPUT_DIR, 'tabnet_performance_summary.csv')
+    # 5. TabNet数据（现在有完整的三个指标）
+    tabnet_file = os.path.join(INPUT_DIR, 'TabNet_performance_summary.csv')
     if os.path.exists(tabnet_file):
         tabnet_data = pd.read_csv(tabnet_file)
-        # TabNet只有R2分数，需要补充MAE和RMSE为NaN
-        tabnet_data['MAE (平均值)'] = np.nan
-        tabnet_data['RMSE (平均值)'] = np.nan
+        tabnet_data['模型'] = '01a_TabNet'
         all_data.append(tabnet_data)
+        print(f"已加载TabNet数据: {len(tabnet_data)} 条记录")
     
     # 合并所有数据
     if all_data:

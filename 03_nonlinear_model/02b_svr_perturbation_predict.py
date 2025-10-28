@@ -50,7 +50,7 @@ MODEL_NAME_PREFIX = '02_SVR_Tuned' # 必须与 02a 脚本中保存的模型名�
 
 # --- 【新增修改点 1】: 定义性能指标的基线 (使用您提供的最新值) ---
 PERFORMANCE_BASELINES = {
-    "抗拉强度": {"min": 260, "max": 370},
+    "抗拉强度": {"min": 260, "max": 410},
     "屈服Rp0.2值*": {"min": 120, "max": 240},
     "断后伸长率": {"min": 34, "max": float('inf')} # 'inf' 表示正无穷
 }

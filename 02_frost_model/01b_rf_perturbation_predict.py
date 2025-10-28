@@ -43,7 +43,7 @@ PERTURBED_FEATURES_LIST = ['热点_峰值温度', '冷点_峰值温度', '保温
 
 # --- 【基线定义】: 定义性能指标的基线 ---
 PERFORMANCE_BASELINES = {
-    "抗拉强度": {"min": 260, "max": 370},
+    "抗拉强度": {"min": 260, "max": 410},
     "屈服Rp0.2值*": {"min": 120, "max": 240},  # 确保Key与PERFORMANCE_METRICS中的名称一致
     "断后伸长率": {"min": 34, "max": float('inf')} # 'inf' 表示正无穷，不绘制最大值基线
 }

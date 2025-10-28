@@ -3,9 +3,9 @@
 文件名: 02_plot_feature_importance.py
 功能: 
     1. 读取所有模型的特征重要性CSV文件
-    2. 统计前5个重要特征的名字及出现次数
-    3. 为每个性能指标绘制特征重要性对比图
-    4. 保存到'results/特征重要性'文件夹
+    2. 统计前5个重要特征的出现次数
+    3. 统计最后5个重要特征的出现次数
+    4. 保存统计结果到CSV文件
 """
 
 import pandas as pd
@@ -24,14 +24,6 @@ plt.rcParams['axes.unicode_minus'] = False
 INPUT_DIR = '特征重要性'
 OUTPUT_DIR = 'results/特征重要性'
 PERFORMANCE_METRICS = ["抗拉强度", "屈服Rp0.2值*", "断后伸长率"]
-MODEL_NAMES = {
-    'random_frost': '随机森林',
-    'XGBoost_Tuned': 'XGBoost',
-    'LightGBM_Tuned': 'LightGBM', 
-    '01_GPR_Tuned': '高斯过程回归',
-    '02_SVR_Tuned': '支持向量回归',
-    '01a_TabNet': 'TabNet'
-}
 
 def load_feature_importance_data():
     """加载所有模型的特征重要性数据"""
@@ -44,28 +36,30 @@ def load_feature_importance_data():
         filename = os.path.basename(file_path)
         
         # 解析文件名获取模型名和性能指标
-        parts = filename.replace('.csv', '').split('_')
+        # 文件名格式: {model_name}_{metric}_feature_importance.csv
+        parts = filename.replace('_feature_importance.csv', '').split('_')
         
         # 确定模型名
-        if 'random_frost' in filename:
-            model_name = 'random_frost'
-            metric_part = filename.replace('random_frost_', '').replace('.csv', '')
-        elif 'XGBoost_Tuned' in filename:
-            model_name = 'XGBoost_Tuned'
-            metric_part = filename.replace('XGBoost_Tuned_', '').replace('.csv', '')
-        elif 'LightGBM_Tuned' in filename:
-            model_name = 'LightGBM_Tuned'
-            metric_part = filename.replace('LightGBM_Tuned_', '').replace('.csv', '')
-        elif '01_GPR_Tuned' in filename:
-            model_name = '01_GPR_Tuned'
-            metric_part = filename.replace('01_GPR_Tuned_', '').replace('.csv', '')
-        elif '02_SVR_Tuned' in filename:
-            model_name = '02_SVR_Tuned'
-            metric_part = filename.replace('02_SVR_Tuned_', '').replace('.csv', '')
-        elif '01a_TabNet' in filename:
+        model_name = None
+        metric = None
+        
+        if filename.startswith('01a_TabNet_'):
             model_name = '01a_TabNet'
-            metric_part = filename.replace('01a_TabNet_', '').replace('.csv', '')
+            metric_part = filename.replace('01a_TabNet_', '').replace('_feature_importance.csv', '')
+        elif filename.startswith('02_SVR_Tuned_'):
+            model_name = '02_SVR_Tuned'
+            metric_part = filename.replace('02_SVR_Tuned_', '').replace('_feature_importance.csv', '')
+        elif filename.startswith('rf_'):
+            model_name = 'RandomForest'
+            metric_part = filename.replace('rf_', '').replace('_feature_importance.csv', '')
+        elif filename.startswith('xgboost_'):
+            model_name = 'XGBoost_Tuned'
+            metric_part = filename.replace('xgboost_', '').replace('_feature_importance.csv', '')
+        elif filename.startswith('lightgbm_'):
+            model_name = 'LightGBM_Tuned'
+            metric_part = filename.replace('lightgbm_', '').replace('_feature_importance.csv', '')
         else:
+            print(f"无法识别文件名格式: {filename}")
             continue
         
         # 确定性能指标
@@ -76,13 +70,13 @@ def load_feature_importance_data():
         elif '断后伸长率' in metric_part:
             metric = '断后伸长率'
         else:
+            print(f"无法识别性能指标: {metric_part}")
             continue
         
         # 读取数据
         try:
             df = pd.read_csv(file_path)
             print(f"处理文件: {filename}")
-            print(f"列名: {df.columns.tolist()}")
             
             # 处理不同的列名格式
             importance_col = None
@@ -94,17 +88,24 @@ def load_feature_importance_data():
                 importance_col = 'Importance (Permutation)'
             
             if importance_col and 'Feature' in df.columns:
-                # 按重要性排序，取前5个
-                df_sorted = df.sort_values(importance_col, ascending=False).head(5)
+                # 按重要性排序
+                df_sorted = df.sort_values(importance_col, ascending=False)
+                
+                # 获取前5个和后5个特征
+                top5_features = df_sorted.head(5)['Feature'].tolist()
+                bottom5_features = df_sorted.tail(5)['Feature'].tolist()
                 
                 key = f"{model_name}_{metric}"
                 all_data[key] = {
                     'model': model_name,
                     'metric': metric,
-                    'top_features': df_sorted['Feature'].tolist(),
-                    'importances': df_sorted[importance_col].tolist()
+                    'top5_features': top5_features,
+                    'bottom5_features': bottom5_features,
+                    'all_features': df_sorted['Feature'].tolist()
                 }
-                print(f"成功加载: {model_name} - {metric}, 前5特征: {df_sorted['Feature'].tolist()}")
+                print(f"成功加载: {model_name} - {metric}")
+                print(f"  前5特征: {top5_features}")
+                print(f"  后5特征: {bottom5_features}")
             else:
                 print(f"文件 {filename} 缺少必要的列")
                 
@@ -114,92 +115,183 @@ def load_feature_importance_data():
     
     return all_data
 
-def analyze_top_features(all_data):
-    """分析前5个重要特征的统计信息"""
-    feature_counts = {}
+def analyze_feature_counts(all_data):
+    """分析前5个和后5个重要特征的统计信息"""
+    top5_counts = {}
+    bottom5_counts = {}
     
     print(f"\n=== 开始分析特征统计 ===")
     print(f"总共加载了 {len(all_data)} 个模型-指标组合")
     
     for metric in PERFORMANCE_METRICS:
-        feature_counts[metric] = Counter()
+        top5_counts[metric] = Counter()
+        bottom5_counts[metric] = Counter()
         metric_models = []
-        all_features_list = []  # 存储所有特征，包括重复的
         
-        # 收集该性能指标下所有模型的前5个特征
+        # 收集该性能指标下所有模型的前5个和后5个特征
         for key, data in all_data.items():
             if data['metric'] == metric:
                 metric_models.append(data['model'])
-                print(f"  {metric}: 找到模型 {data['model']}, 前5特征: {data['top_features']}")
-                for feature in data['top_features']:
-                    feature_counts[metric][feature] += 1
-                    all_features_list.append(feature)  # 添加到总列表中
+                print(f"  {metric}: 找到模型 {data['model']}")
+                print(f"    前5特征: {data['top5_features']}")
+                print(f"    后5特征: {data['bottom5_features']}")
+                
+                # 统计前5个特征
+                for feature in data['top5_features']:
+                    top5_counts[metric][feature] += 1
+                
+                # 统计后5个特征
+                for feature in data['bottom5_features']:
+                    bottom5_counts[metric][feature] += 1
         
         print(f"  {metric}: 共找到 {len(metric_models)} 个模型: {metric_models}")
-        print(f"  {metric}: 总特征出现次数: {sum(feature_counts[metric].values())}")
-        print(f"  {metric}: 所有特征列表(包括重复): {all_features_list}")
-        print(f"  {metric}: 所有特征列表长度: {len(all_features_list)} (应该是30)")
+        print(f"  {metric}: 前5特征总出现次数: {sum(top5_counts[metric].values())}")
+        print(f"  {metric}: 后5特征总出现次数: {sum(bottom5_counts[metric].values())}")
     
-    return feature_counts
+    return top5_counts, bottom5_counts
 
-# 删除单个模型特征重要性对比图功能
-
-def plot_feature_frequency_analysis(feature_counts, output_dir):
-    """绘制特征出现频率分析图"""
+def plot_feature_frequency_analysis(top5_counts, bottom5_counts, output_dir):
+    """绘制特征出现频率分析图 - 前5和后5特征左右排列"""
     
-    for metric, counts in feature_counts.items():
-        if not counts:
+    for metric in PERFORMANCE_METRICS:
+        # 检查是否有数据
+        if not top5_counts[metric] and not bottom5_counts[metric]:
             continue
             
-        # 获取出现次数最多的特征
-        top_features = counts.most_common()  
+        # 创建子图，左右排列
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
+        fig.suptitle(f'{metric} - 特征重要性频率分析', fontsize=18, fontweight='bold')
         
-        if not top_features:
-            continue
+        # 绘制前5重要特征（左侧）
+        if top5_counts[metric]:
+            top_features = top5_counts[metric].most_common()
+            if top_features:
+                features, frequencies = zip(*top_features)
+                
+                # 绘制水平柱状图
+                bars = ax1.barh(range(len(features)), frequencies, 
+                              color=plt.cm.plasma(np.linspace(0, 1, len(features))), 
+                              alpha=0.8, edgecolor='black', linewidth=0.5, height=0.6)
+                
+                # 设置标签
+                ax1.set_yticks(range(len(features)))
+                ax1.set_yticklabels(features, fontsize=11)
+                ax1.set_xlabel('出现次数', fontsize=12, fontweight='bold')
+                ax1.set_title('前5重要特征', fontsize=14, fontweight='bold')
+                
+                # 添加数值标签
+                for i, (bar, freq) in enumerate(zip(bars, frequencies)):
+                    width = bar.get_width()
+                    ax1.text(width + 0.05, bar.get_y() + bar.get_height()/2.,
+                           f'{freq}次', ha='left', va='center', fontsize=10, fontweight='bold')
+                
+                # 设置网格和范围
+                ax1.grid(True, alpha=0.3, axis='x')
+                ax1.set_axisbelow(True)
+                ax1.set_xlim(0, max(frequencies) + 0.5)
         
-        # 创建图表
-        fig, ax = plt.subplots(figsize=(12, 8))
-        
-        features, frequencies = zip(*top_features)
-        
-        # 绘制水平柱状图
-        bars = ax.barh(range(len(features)), frequencies, 
-                      color=plt.cm.plasma(np.linspace(0, 1, len(features))), 
-                      alpha=0.8, edgecolor='black', linewidth=0.5)
-        
-        # 设置标签
-        ax.set_yticks(range(len(features)))
-        ax.set_yticklabels(features, fontsize=12)
-        ax.set_xlabel('出现次数', fontsize=14)
-        ax.set_title(f'{metric} - 前5重要特征出现频率分析', fontsize=16, fontweight='bold')
-        
-        # 添加数值标签
-        for i, (bar, freq) in enumerate(zip(bars, frequencies)):
-            width = bar.get_width()
-            ax.text(width + 0.1, bar.get_y() + bar.get_height()/2.,
-                   f'{freq}次', ha='left', va='center', fontsize=11, fontweight='bold')
-        
-        # 设置网格
-        ax.grid(True, alpha=0.3, axis='x')
-        ax.set_axisbelow(True)
+        # 绘制后5重要特征（右侧）
+        if bottom5_counts[metric]:
+            bottom_features = bottom5_counts[metric].most_common()
+            if bottom_features:
+                features, frequencies = zip(*bottom_features)
+                
+                # 绘制水平柱状图
+                bars = ax2.barh(range(len(features)), frequencies, 
+                              color=plt.cm.viridis(np.linspace(0, 1, len(features))), 
+                              alpha=0.8, edgecolor='black', linewidth=0.5, height=0.6)
+                
+                # 设置标签
+                ax2.set_yticks(range(len(features)))
+                ax2.set_yticklabels(features, fontsize=11)
+                ax2.set_xlabel('出现次数', fontsize=12, fontweight='bold')
+                ax2.set_title('后5重要特征', fontsize=14, fontweight='bold')
+                
+                # 添加数值标签
+                for i, (bar, freq) in enumerate(zip(bars, frequencies)):
+                    width = bar.get_width()
+                    ax2.text(width + 0.05, bar.get_y() + bar.get_height()/2.,
+                           f'{freq}次', ha='left', va='center', fontsize=10, fontweight='bold')
+                
+                # 设置网格和范围
+                ax2.grid(True, alpha=0.3, axis='x')
+                ax2.set_axisbelow(True)
+                ax2.set_xlim(0, max(frequencies) + 0.5)
         
         plt.tight_layout()
         
         # 保存图片
-        output_filename = f'02_feature_frequency_analysis_{metric.replace("*", "").replace("Rp0.2值", "Rp02")}.png'
+        output_filename = f'feature_frequency_analysis_{metric.replace("*", "").replace("Rp0.2值", "Rp02")}.png'
         output_path = os.path.join(output_dir, output_filename)
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        print(f"已保存频率分析图: {output_path}")
+        print(f"已保存特征频率分析图: {output_path}")
         
         plt.show()
 
-# 删除热力图功能
+def save_feature_counts_to_csv(top5_counts, bottom5_counts, output_dir):
+    """保存特征统计结果到CSV文件"""
+    
+    for metric in PERFORMANCE_METRICS:
+        # 保存前5特征统计
+        top5_data = []
+        for feature, count in top5_counts[metric].most_common():
+            top5_data.append({
+                '特征名称': feature,
+                '出现次数': count,
+                '性能指标': metric,
+                '特征类型': '前5重要'
+            })
+        
+        top5_df = pd.DataFrame(top5_data)
+        top5_filename = f'top5_feature_counts_{metric.replace("*", "").replace("Rp0.2值", "Rp02")}.csv'
+        top5_path = os.path.join(output_dir, top5_filename)
+        top5_df.to_csv(top5_path, index=False, encoding='utf-8-sig')
+        print(f"已保存前5特征统计: {top5_path}")
+        
+        # 保存后5特征统计
+        bottom5_data = []
+        for feature, count in bottom5_counts[metric].most_common():
+            bottom5_data.append({
+                '特征名称': feature,
+                '出现次数': count,
+                '性能指标': metric,
+                '特征类型': '后5重要'
+            })
+        
+        bottom5_df = pd.DataFrame(bottom5_data)
+        bottom5_filename = f'bottom5_feature_counts_{metric.replace("*", "").replace("Rp0.2值", "Rp02")}.csv'
+        bottom5_path = os.path.join(output_dir, bottom5_filename)
+        bottom5_df.to_csv(bottom5_path, index=False, encoding='utf-8-sig')
+        print(f"已保存后5特征统计: {bottom5_path}")
+    
+    # 保存综合统计
+    all_data = []
+    for metric in PERFORMANCE_METRICS:
+        for feature, count in top5_counts[metric].most_common():
+            all_data.append({
+                '特征名称': feature,
+                '出现次数': count,
+                '性能指标': metric,
+                '特征类型': '前5重要'
+            })
+        for feature, count in bottom5_counts[metric].most_common():
+            all_data.append({
+                '特征名称': feature,
+                '出现次数': count,
+                '性能指标': metric,
+                '特征类型': '后5重要'
+            })
+    
+    all_df = pd.DataFrame(all_data)
+    all_path = os.path.join(output_dir, 'all_feature_counts_summary.csv')
+    all_df.to_csv(all_path, index=False, encoding='utf-8-sig')
+    print(f"已保存综合统计: {all_path}")
 
 def main():
     """主函数"""
     print("=" * 60)
     print("--- 启动脚本: 02_plot_feature_importance.py ---")
-    print("--- 目的: 绘制所有模型的特征重要性对比图 ---")
+    print("--- 目的: 统计所有模型的特征重要性出现次数 ---")
     print("=" * 60)
     
     # 确保输出目录存在
@@ -220,33 +312,31 @@ def main():
     for key, data in all_data.items():
         print(f"  {key}: {data['model']} - {data['metric']}")
     
-    # 分析前5个重要特征的统计信息
-    print("正在分析前5个重要特征的统计信息...")
-    feature_counts = analyze_top_features(all_data)
+    # 分析前5个和后5个重要特征的统计信息
+    print("正在分析特征统计信息...")
+    top5_counts, bottom5_counts = analyze_feature_counts(all_data)
     
     # 打印统计结果
-    for metric, counts in feature_counts.items():
-        print(f"\n{metric} 前5重要特征出现次数统计:")
-        total_features = sum(counts.values())
-        unique_features = len(counts)
-        print(f"  总特征出现次数: {total_features} (应该是30)")
-        print(f"  唯一特征数量: {unique_features}")
-        print(f"  所有特征出现次数:")
-        for feature, count in counts.most_common():
+    for metric in PERFORMANCE_METRICS:
+        print(f"\n{metric} 特征出现次数统计:")
+        print(f"  前5重要特征:")
+        for feature, count in top5_counts[metric].most_common():
             print(f"    {feature}: {count}次")
         
-        # 验证：显示每个模型的前5特征
-        print(f"  各模型前5特征详情:")
-        for key, data in all_data.items():
-            if data['metric'] == metric:
-                print(f"    {data['model']}: {data['top_features']}")
+        print(f"  后5重要特征:")
+        for feature, count in bottom5_counts[metric].most_common():
+            print(f"    {feature}: {count}次")
+    
+    # 保存统计结果到CSV文件
+    print(f"\n正在保存统计结果到CSV文件...")
+    save_feature_counts_to_csv(top5_counts, bottom5_counts, OUTPUT_DIR)
     
     # 绘制特征出现频率分析图
     print(f"\n正在绘制特征出现频率分析图...")
-    plot_feature_frequency_analysis(feature_counts, OUTPUT_DIR)
+    plot_feature_frequency_analysis(top5_counts, bottom5_counts, OUTPUT_DIR)
     
     print("\n" + "=" * 60)
-    print("--- 所有特征重要性图表绘制完成 ---")
+    print("--- 所有特征重要性统计和图表绘制完成 ---")
     print("=" * 60)
 
 if __name__ == '__main__':
