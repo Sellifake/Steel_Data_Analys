@@ -4,7 +4,7 @@
 
 本项目围绕钢卷热处理与性能评估，提供从数据读取、预处理、建模训练、扰动分析到结果可视化的一整套流程。通过多种机器学习算法对钢卷性能指标进行预测建模，并分析关键工艺参数对性能的影响。
 
-## 模块结构与职责
+## 项目结构
 
 - **`01_read_data/`**：数据读取、清洗、合并与EDA；生成特征筛选结果与扰动数据集
   - 详见 [01_read_data/README.md](01_read_data/README.md)
@@ -16,12 +16,17 @@
   - 详见 [04_neural_network/README.md](04_neural_network/README.md)
 - **`05_result_plot/`**：汇总并对比模型回归指标、特征重要性等可视化结果
   - 详见 [05_result_plot/README.md](05_result_plot/README.md)
+- **`06_report/`**：研究报告与LaTeX源码
+  - 包含完整的研究报告LaTeX源文件、所有图表文件（`fig/`文件夹）、编译后的PDF
+  - 可直接上传整个`06_report/`文件夹到Overleaf进行在线编译
+  - 项目GitHub地址：https://github.com/Sellifake/Steel_Data_Analys
 
 ## 快速开始
 
-1. **数据准备**：运行 `01_read_data` 模块，生成最终数据集和扰动数据集
+1. **数据准备**：运行 `01_read_data` 模块，生成最终数据集（`04_data_selected.xlsx`）和扰动数据集
 2. **模型训练**：运行 `02_frost_model`、`03_nonlinear_model`、`04_neural_network` 模块，训练各类型模型
 3. **结果可视化**：运行 `05_result_plot` 模块，生成汇总对比图表
+4. **生成报告**：查看 `06_report/` 文件夹中的LaTeX报告源码，可直接上传到Overleaf编译
 
 ## 数据流程
 
@@ -93,6 +98,12 @@
   - 可视化：matplotlib、seaborn
   - 优化：optuna、scikit-optimize
 
+## 数据文件
+
+- **`01_read_data/results/04_data_selected.xlsx`**：最终清理后的数据集，包含2,760行、39列（35个特征+3个性能指标+1个ID列）
+  - 该文件已纳入版本控制，可直接使用
+  - 数据格式：工艺特征 → 化学成分 → 性能指标
+
 ## 注意事项
 
 - 请按照模块顺序依次运行各脚本
@@ -100,5 +111,6 @@
 - 深度学习模块建议使用GPU加速训练
 - 所有模型都设置了随机种子确保结果可复现
 - 详细的使用说明请参考各模块的README文件
+- 报告相关文件（LaTeX源码、图表）已整理到`06_report/`文件夹，可直接上传到Overleaf
 
 

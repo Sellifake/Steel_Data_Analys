@@ -18,9 +18,12 @@ env/
 *.xlsx
 *.csv
 !/05_result_plot/results/**/*.csv
+# 重要：04_data_selected.xlsx 需要被纳入版本控制
+!/01_read_data/results/04_data_selected.xlsx
 
-# 训练与可视化结果目录一律忽略
-01_read_data/results/
+# 训练与可视化结果目录一律忽略（但先排除特定文件）
+01_read_data/results/*
+!01_read_data/results/04_data_selected.xlsx
 02_frost_model/results/
 03_nonlinear_model/results/
 04_neural_network/results/
