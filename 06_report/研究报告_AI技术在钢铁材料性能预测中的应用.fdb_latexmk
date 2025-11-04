@@ -1,5 +1,5 @@
 # Fdb version 4
-["pdflatex"] 1761981933.47226 "d:/Project/Python/steel/研究报告_AI技术在钢铁材料性能预测中的应用.tex" "研究报告_AI技术在钢铁材料性能预测中的应用.pdf" "研究报告_AI技术在钢铁材料性能预测中的应用" 1761981940.54463 0
+["pdflatex"] 1762260514.83234 "d:/Project/Python/steel/06_report/研究报告_AI技术在钢铁材料性能预测中的应用.tex" "研究报告_AI技术在钢铁材料性能预测中的应用.pdf" "研究报告_AI技术在钢铁材料性能预测中的应用" 1762260522.22409 0
   "c:/Windows/Fonts/msyh.ttc" 1753516812 19704352 1e10e74402e59d54499af795caf0b135 ""
   "c:/Windows/Fonts/simhei.ttf" 1711630440 9755440 983b60188a8e5a7c29c06c674f428b3d ""
   "c:/Windows/Fonts/simsun.ttc" 1753516812 18070492 992f2bdc407dde6953c5ed83ceac9a91 ""
@@ -269,7 +269,7 @@
   "d:/LenovoSoftstore/xtexlive/texlive/2024/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1714037154 5513122 a13b833d8e943784847eeb8e86dd94b0 ""
   "d:/LenovoSoftstore/xtexlive/texlive/2024/texmf-var/web2c/pdftex/pdflatex.fmt" 1714037355 8221923 6b4a17c8090a27ce786881e7a97c3606 ""
   "d:/LenovoSoftstore/xtexlive/texlive/2024/texmf.cnf" 1714037128 713 e69b156964470283e0530f5060668171 ""
-  "d:/Project/Python/steel/研究报告_AI技术在钢铁材料性能预测中的应用.tex" 1761981926 33639 4a28cf5a607d141528b120c3e2fa7382 ""
+  "d:/Project/Python/steel/06_report/研究报告_AI技术在钢铁材料性能预测中的应用.tex" 1762260463 33940 99eeacc5c37566b6bf04ddf913c09a44 ""
   "fig/01_comprehensive_model_performance_comparison.png" 1761707127 786588 02979c4a4592d2ed7d3c3794b95292f0 ""
   "fig/02b_pdp_plot_cold_spot_temp_vs_tensile_strength.png" 1761707127 225152 a5a3ff149634b6297557e7a96f073f0d ""
   "fig/02b_pdp_plot_holding_time_vs_tensile_strength.png" 1761707127 205062 4e6fe218bb4f272151f37d030cff602e ""
@@ -277,9 +277,10 @@
   "fig/feature_frequency_analysis_elongation.png" 1761707127 595515 dec9e2e99e77c52b9e43aa26f7a67f13 ""
   "fig/feature_frequency_analysis_tensile_strength.png" 1761707127 520717 d3bd01035c56bb29484aa8dbad095d78 ""
   "fig/feature_frequency_analysis_yield_strength.png" 1761707127 535113 87546789a8d0b836eab52023c52e4307 ""
-  "研究报告_AI技术在钢铁材料性能预测中的应用.aux" 1761981939 11397 4bcb92140158a833b97f8ff2cc5ac153 "pdflatex"
-  "研究报告_AI技术在钢铁材料性能预测中的应用.out" 1761981939 3643 8424ab117cedb55fddb4d50bf2d24c64 "pdflatex"
-  "研究报告_AI技术在钢铁材料性能预测中的应用.tex" 1761981926 33639 4a28cf5a607d141528b120c3e2fa7382 ""
+  "fig/framework.png" 1762260050 390058 e1e2d627404207cf5df29debc08d3917 ""
+  "研究报告_AI技术在钢铁材料性能预测中的应用.aux" 1762260521 11397 57d4571056ba74473b69719a219461e7 "pdflatex"
+  "研究报告_AI技术在钢铁材料性能预测中的应用.out" 1762260521 3643 8424ab117cedb55fddb4d50bf2d24c64 "pdflatex"
+  "研究报告_AI技术在钢铁材料性能预测中的应用.tex" 1762260463 33940 99eeacc5c37566b6bf04ddf913c09a44 ""
   (generated)
   "研究报告_AI技术在钢铁材料性能预测中的应用.aux"
   "研究报告_AI技术在钢铁材料性能预测中的应用.log"
